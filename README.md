@@ -1,7 +1,5 @@
 # Wireless Drive-By-Wire — Capstone Spring 2026
 
-> ⚠️ **WARNING:** This repo is only recent as of Wednesday, April 22nd. Please create another branch and merge the most recent additions to main! Please be sure to keep the readme and presentations.
-
 A system that allows a person to remotely steer, accelerate, and brake a real car using a Logitech G29 steering wheel and pedals over the internet.
 
 ---
@@ -17,7 +15,6 @@ A system that allows a person to remotely steer, accelerate, and brake a real ca
    - [Sender Laptop](#3-sender-laptop)
 5. [Running the System](#running-the-system)
 6. [How It Works](#how-it-works)
-7. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -31,7 +28,7 @@ G29 Wheel ──USB──► Laptop  ──internet──► OCI Relay Server �
                                                                            │
                                                                       DAC outputs
                                                                            │
-                                                                     Steering motor
+                                                            Steering motor / Throttle / Brake
 ```
 
 The driver's laptop reads the G29 steering wheel and pedals and sends control packets over the internet to a cloud relay server (Oracle Cloud). The relay server forwards those packets to an ESP32 microcontroller on a custom PCB inside the car. The ESP32 runs a PID control loop for steering, reading the actual angle from the CAN bus, and outputs analog voltages through DACs to drive the steering motor, throttle, and brake actuators.
@@ -160,7 +157,7 @@ UDP listening on port: 4210
 Once connected, the ESP32 sends a heartbeat to the relay server every 2 seconds. On the relay server terminal you should see:
 
 ```
-CAR CONNECTED: ('x.x.x.x', 4210)
+✅ CAR CONNECTED! Logged IP: ('x.x.x.x', 4210)
 ```
 
 This confirms the full car-to-server link is working.
@@ -210,7 +207,7 @@ When the ESP32 boots, it connects to the mobile hotspot and immediately begins s
 - Keeps the hotspot's NAT mapping alive so the server can send packets back through it
 
 
-### Step 2 — Driver sends steering commands
+### Step 2 — Driver sends control commands
 
 `g29_to_server_original.py` reads the G29 steering axis at 60 Hz and sends a UDP packet to the relay server formatted as:
 
@@ -256,14 +253,3 @@ DAC 1 Ch D = brake2Base (1.51V) + brakeMag
 > The brake channels are always driven to their baseline voltages. Writing 0V is not the same as no brake and may be interpreted as a fault by the car's ECU.
 
 ---
-
-## Troubleshooting
-
-| Symptom | Likely Cause | Fix |
-|---|---|---|
-| `No joystick found.` | G29 not detected by pygame | Unplug and replug the G29, wait for calibration spin, then rerun |
-| Relay server never prints `CAR CONNECTED` | ESP32 cannot reach the server | Confirm hotspot is on; confirm UDP port 4210 is open on OCI |
-| Steering does not respond after `g29_to_server_original.py` starts | CMD packets not reaching ESP32 | Confirm relay server is running and `CAR CONNECTED` was printed |
-| Steering drives to the limit and stays there | CAN bus not working — no angle feedback to PID | Check MCP2515 wiring; verify crystal is 8 MHz |
-| Serial Monitor shows `MCP2515 Init Failed` | SPI wiring issue or wrong CS pin | Check wiring against pin table above |
-| Relay server prints `Car heartbeat timed out` | ESP32 stopped sending heartbeats | Check ESP32 is powered and connected to hotspot |
