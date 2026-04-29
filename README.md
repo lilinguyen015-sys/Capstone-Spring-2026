@@ -34,7 +34,7 @@ G29 Wheel ──USB──► Laptop  ──internet──► OCI Relay Server �
                                                                      Steering motor
 ```
 
-The driver's laptop reads the G29 steering wheel and sends control packets over the internet to a cloud relay server (Oracle Cloud). The relay server forwards those packets to an ESP32 microcontroller on a custom PCB inside the car. The ESP32 runs a PID control loop, reading the actual steering angle from the car's CAN bus and outputting corrective voltages through DACs to drive the steering motor.
+The driver's laptop reads the G29 steering wheel and pedals and sends control packets over the internet to a cloud relay server (Oracle Cloud). The relay server forwards those packets to an ESP32 microcontroller on a custom PCB inside the car. The ESP32 runs a PID control loop for steering, reading the actual angle from the CAN bus, and outputs analog voltages through DACs to drive the steering motor, throttle, and brake actuators.
 
 The relay server is necessary because the ESP32 is behind a mobile hotspot and has no public IP address — it cannot be reached directly from the internet. Instead, the ESP32 registers itself with the relay server on startup, and the relay server uses that registration to forward packets to it.
 
@@ -44,7 +44,7 @@ The relay server is necessary because the ESP32 is behind a mobile hotspot and h
 
 | Component | Qty | Notes |
 |---|---|---|
-| Logitech G29 Steering Wheel | 1 | Connected via USB to the driver's laptop |
+| Logitech G29 Steering Wheel + Pedals | 1 | Connected via USB to the driver's laptop |
 | Driver Laptop | 1 | Any laptop capable of running Python 3 |
 | ESP32 | 1 | Mounted on the custom DBW PCB |
 | Custom DBW PCB | 1 | Houses the ESP32, CAN controller, and DACs |
@@ -189,7 +189,7 @@ python3 g29_to_server_original.py
 Expected output:
 ```
 Joystick detected: Logitech G29 Driving Force Racing Wheel
-Sending UDP to 147.224.143.221:4210 at 60 Hz
+Sending UDP to OCI Server at 147.224.143.221:4210
 seq=00001 | steer= 0.0000 | throttle=0.0000 | brake=0.0000
 seq=00002 | steer= 0.0012 | throttle=0.0000 | brake=0.0000
 ...
@@ -209,7 +209,6 @@ When the ESP32 boots, it connects to the mobile hotspot and immediately begins s
 - Tells the server the ESP32's current public IP and port
 - Keeps the hotspot's NAT mapping alive so the server can send packets back through it
 
-The relay server responds with `ACK` to confirm it is reachable.
 
 ### Step 2 — Driver sends steering commands
 
@@ -223,30 +222,38 @@ Where `<steer>` is a float from -1.0 (full left) to +1.0 (full right).
 
 ### Step 3 — Relay server forwards to the car
 
-`relay_server.py` receives `CMD` packets from the driver's laptop and forwards them verbatim to the last address it received a `HEARTBEAT` from. If no heartbeat has been received in the last 30 seconds, the packet is dropped and a warning is printed.
+`relay_server.py` receives `CMD` packets from the driver's laptop and forwards them verbatim to the last address it received a `HEARTBEAT` from.
 
-### Step 4 — ESP32 drives the steering motor
+### Step 4 — ESP32 drives the actuators
 
-The ESP32 parses the `CMD` packet and runs the steering value through a PID control loop:
+The ESP32 parses the `CMD` packet and controls three systems simultaneously:
 
+**Steering (closed-loop PID):**
 ```
-Joystick steer (-1.0 to +1.0)
-        │
-        × 250
-        │
-   targetSTA (degrees)
-        │
-   low-pass smoothing filter
-        │
-   PID controller  ◄── actual angle read from CAN bus (ID 0x2)
-        │
-   torque value (-1500 to +1500)
-        │
-   DAC 2 Ch C = midpoint (2449) + torque  ──►  steering motor
-   DAC 2 Ch D = midpoint (2449) - torque  ──►  (push-pull)
+steer (-1.0 to +1.0)  x250  targetSTA (degrees)  low-pass filter  PID  torque
+
+DAC 2 Ch C = steer midpoint (2.47V) + torque
+DAC 2 Ch D = steer midpoint (2.47V) - torque
+```
+The actual steering angle is read from the CAN bus (ID `0x2`) and fed back into the PID every loop.
+
+**Throttle (open-loop):**
+```
+throttle (0.0-1.0)  x300  accelMag (0-300)
+
+DAC 1 Ch A = accel1Base (0.37V) + accelMag
+DAC 1 Ch B = accel2Base (0.75V) + (2 x accelMag)
 ```
 
-The midpoint DAC value of 2449 corresponds to 2.45 V, which is the zero-torque center point for the steering motor.
+**Brake (open-loop):**
+```
+brake (0.0-1.0)  x900  brakeMag (0-900)
+
+DAC 1 Ch C = brake1Base (3.42V) - brakeMag
+DAC 1 Ch D = brake2Base (1.51V) + brakeMag
+```
+
+> The brake channels are always driven to their baseline voltages. Writing 0V is not the same as no brake and may be interpreted as a fault by the car's ECU.
 
 ---
 
