@@ -2,7 +2,7 @@
 
 > ⚠️ **WARNING:** This repo is only recent as of Wednesday, April 22nd. Please create another branch and merge the most recent additions to main! Please be sure to keep the readme and presentations.
 
-A system that allows a person to remotely steer a real car using a Logitech G29 steering wheel over the internet.
+A system that allows a person to remotely steer, accelerate, and brake a real car using a Logitech G29 steering wheel and pedals over the internet.
 
 ---
 
@@ -17,8 +17,7 @@ A system that allows a person to remotely steer a real car using a Logitech G29 
    - [Sender Laptop](#3-sender-laptop)
 5. [Running the System](#running-the-system)
 6. [How It Works](#how-it-works)
-7. [Not Yet Implemented](#not-yet-implemented)
-8. [Troubleshooting](#troubleshooting)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -28,7 +27,7 @@ A system that allows a person to remotely steer a real car using a Logitech G29 
 [Driver Side]                  [Cloud]                    [Car Side]
 
 G29 Wheel ──USB──► Laptop  ──internet──► OCI Relay Server ──WiFi──► ESP32 on PCB
-                 (sender.py)            (relay_server.py)           (esp32_car.ino)
+                 (g29_to_server_original.py)            (relay_server.py)           (esp32_car.ino)
                                                                            │
                                                                       DAC outputs
                                                                            │
@@ -65,6 +64,17 @@ The relay server is necessary because the ESP32 is behind a mobile hotspot and h
 | CAN INT | 4 |
 | I2C Bus 1 SDA / SCL (DAC 1) | 21 / 22 |
 | I2C Bus 2 SDA / SCL (DAC 2) | 33 / 32 |
+
+### DAC Channel Assignments
+
+| DAC | Channel | Function | Baseline Voltage |
+|---|---|---|---|
+| DAC 2 | C | Steering main | 2.47 V |
+| DAC 2 | D | Steering sub | 2.47 V |
+| DAC 1 | A | Throttle main | 0.37 V |
+| DAC 1 | B | Throttle sub | 0.75 V |
+| DAC 1 | C | Brake main | 3.42 V |
+| DAC 1 | D | Brake sub | 1.51 V |
 
 ---
 
@@ -164,7 +174,7 @@ This confirms the full car-to-server link is working.
    ```
    pip install pygame
    ```
-3. No other configuration is needed. The server IP is already set in `sender.py`.
+3. No other configuration is needed. The server IP is already set in `g29_to_server_original.py`.
 
 ---
 
@@ -173,19 +183,19 @@ This confirms the full car-to-server link is working.
 Once the relay server is running and the ESP32 shows `CAR CONNECTED` on the server, run the sender on the driver's laptop:
 
 ```
-python3 sender.py
+python3 g29_to_server_original.py
 ```
 
 Expected output:
 ```
 Joystick detected: Logitech G29 Driving Force Racing Wheel
 Sending UDP to 147.224.143.221:4210 at 60 Hz
-seq=0 | steer=0.0000
-seq=1 | steer=0.0012
+seq=00001 | steer= 0.0000 | throttle=0.0000 | brake=0.0000
+seq=00002 | steer= 0.0012 | throttle=0.0000 | brake=0.0000
 ...
 ```
 
-The system is now live. Turning the G29 wheel will steer the car.
+The system is now live. Turning the G29 wheel steers the car. Pressing the throttle and brake pedals controls acceleration and braking.
 
 Press **Ctrl+C** to stop.
 
@@ -203,7 +213,7 @@ The relay server responds with `ACK` to confirm it is reachable.
 
 ### Step 2 — Driver sends steering commands
 
-`sender.py` reads the G29 steering axis at 60 Hz and sends a UDP packet to the relay server formatted as:
+`g29_to_server_original.py` reads the G29 steering axis at 60 Hz and sends a UDP packet to the relay server formatted as:
 
 ```
 CMD;<seq>;<steer>
@@ -240,78 +250,13 @@ The midpoint DAC value of 2449 corresponds to 2.45 V, which is the zero-torque c
 
 ---
 
-## Not Yet Implemented
-
-> The following features are documented here for the next developer. The hardware (DAC channels, G29 pedal axes) is already in place — only software changes are needed.
-
-### Throttle (Acceleration)
-
-The G29 throttle pedal is on **axis 2**. pygame reports pedal axes as -1.0 when fully released and +1.0 when fully pressed. This must be normalized to a 0.0–1.0 range before use.
-
-The normalized throttle value maps to an `accelmag` offset (0–1500) added to the baseline DAC voltages on **DAC 1, channels A and B**:
-
-| Channel | Baseline Voltage | Baseline DAC Value | Formula |
-|---|---|---|---|
-| DAC 1 Ch A (accel main) | 0.37 V | ~370 | `accel1 + accelmag` |
-| DAC 1 Ch B (accel sub) | 0.75 V | ~750 | `accel2 + (2 × accelmag)` |
-
-```
-accelmag = throttle_normalized × 1500
-```
-
-### Brakes
-
-The G29 brake pedal is on **axis 3**, normalized the same way as throttle.
-
-The normalized brake value maps to a `brakemag` offset (0–600) applied to **DAC 1, channels C and D**:
-
-| Channel | Baseline Voltage | Baseline DAC Value | Formula |
-|---|---|---|---|
-| DAC 1 Ch C (brake main) | 3.38 V | ~3379 | `brake1 - brakemag` |
-| DAC 1 Ch D (brake sub) | 1.48 V | ~1480 | `brake2 + brakemag` |
-
-```
-brakemag = brake_normalized × 600
-```
-
-> ⚠️ **Important:** The brake DAC channels must always be driven to their baseline voltages, even when no braking is commanded. Writing 0V to these channels is not the same as "no brake" and may be interpreted as a fault by the car's ECU.
-
-### Code Changes Required
-
-**`sender.py`** — restore the `normalize_01` helper and re-add throttle/brake to the packet:
-
-```python
-THROTTLE_AXIS_INDEX = 2
-BRAKE_AXIS_INDEX = 3
-
-def normalize_01(v: float) -> float:
-    return max(0.0, min(1.0, (v + 1.0) / 2.0))
-
-throttle = normalize_01(js.get_axis(THROTTLE_AXIS_INDEX))
-brake = normalize_01(js.get_axis(BRAKE_AXIS_INDEX))
-msg = f"CMD;{seq};{steer:.4f};{throttle:.4f};{brake:.4f}"
-```
-
-**`esp32_car.ino`** — update `sscanf` to parse throttle and brake, compute `accelmag` and `brakemag`, initialize baseline DAC values in `setup()`, and replace `dac.fastWrite(0, 0, 0, 0)` with:
-
-```cpp
-dac.fastWrite(
-    accel1 + accelmag,
-    accel2 + (2 * accelmag),
-    brake1 - brakemag,
-    brake2 + brakemag
-);
-```
-
----
-
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
 | `No joystick found.` | G29 not detected by pygame | Unplug and replug the G29, wait for calibration spin, then rerun |
 | Relay server never prints `CAR CONNECTED` | ESP32 cannot reach the server | Confirm hotspot is on; confirm UDP port 4210 is open on OCI |
-| Steering does not respond after `sender.py` starts | CMD packets not reaching ESP32 | Confirm relay server is running and `CAR CONNECTED` was printed |
+| Steering does not respond after `g29_to_server_original.py` starts | CMD packets not reaching ESP32 | Confirm relay server is running and `CAR CONNECTED` was printed |
 | Steering drives to the limit and stays there | CAN bus not working — no angle feedback to PID | Check MCP2515 wiring; verify crystal is 8 MHz |
 | Serial Monitor shows `MCP2515 Init Failed` | SPI wiring issue or wrong CS pin | Check wiring against pin table above |
 | Relay server prints `Car heartbeat timed out` | ESP32 stopped sending heartbeats | Check ESP32 is powered and connected to hotspot |
