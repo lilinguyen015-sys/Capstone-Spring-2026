@@ -1,57 +1,38 @@
 import socket
-import time
 
-
+# Define where the server listens
 UDP_IP = "0.0.0.0"
 UDP_PORT = 4210
-HEARTBEAT_TIMEOUT = 30.0
 
+# Create the network socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
 
-def main() -> None:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((UDP_IP, UDP_PORT))
-    print(f"Relay server live on port {UDP_PORT}. Waiting for car heartbeat...")
+print(f"Relay server live on port {UDP_PORT}. Waiting for car heartbeat...")
 
-    car_address = None
-    last_heartbeat = 0.0
+car_address = None
 
-    while True:
-        try:
-            data, addr = sock.recvfrom(1024)
-        except OSError as e:
-            print(f"Socket error: {e}")
-            time.sleep(1)
-            continue
+while True:
+    # Wait to receive a packet of data
+    data, addr = sock.recvfrom(1024)
+    
+    try:
+        # Convert bytes to text and STRIP invisible newlines/spaces
+        message = data.decode('utf-8').strip()
+        
+        # DEBUG: Print exactly what we just received and from who
+        print(f"DEBUG - Received: '{message}' from {addr}")
+        
+    except UnicodeDecodeError:
+        message = ""
+        # DEBUG: If it's raw bytes (like steering data)
+        print(f"DEBUG - Received raw bytes from {addr}")
 
-        try:
-            message = data.decode("utf-8").strip()
-        except UnicodeDecodeError:
-            message = ""
-
-        if message == "HEARTBEAT":
-            car_address = addr
-            last_heartbeat = time.time()
-            print(f"CAR CONNECTED: {addr}")
-            try:
-                sock.sendto(b"ACK", car_address)
-            except OSError as e:
-                print(f"Failed to ACK car: {e}")
-
-        elif message == "ACK":
-            pass
-
-        elif car_address is not None and addr != car_address:
-            if time.time() - last_heartbeat > HEARTBEAT_TIMEOUT:
-                print(
-                    f"WARNING: Car heartbeat timed out, "
-                    f"dropping packet (stale address: {car_address})"
-                )
-            else:
-                try:
-                    sock.sendto(data, car_address)
-                except OSError as e:
-                    print(f"Failed to forward to car: {e}")
-
-
-if __name__ == "__main__":
-    main()
+    # Check if the packet is from the ESP32 Car
+    if message == "HEARTBEAT":
+        car_address = addr
+        print(f"✅ CAR CONNECTED! Logged IP: {addr}")
+        
+    # If we know where the car is, forward the data (make sure we don't bounce the heartbeat back to the car)
+    elif car_address and addr != car_address:
+        sock.sendto(data, car_address)
