@@ -15,6 +15,7 @@ A system that allows a person to remotely steer, accelerate, and brake a real ca
    - [Sender Laptop](#3-sender-laptop)
 5. [Running the System](#running-the-system)
 6. [How It Works](#how-it-works)
+7. [Future Work](#future-work)
 
 ---
 
@@ -212,10 +213,16 @@ When the ESP32 boots, it connects to the mobile hotspot and immediately begins s
 `g29_to_server_original.py` reads the G29 steering axis at 60 Hz and sends a UDP packet to the relay server formatted as:
 
 ```
-CMD;<seq>;<steer>
+CMD;<seq>;<steer>;<throttle>;<brake>
 ```
 
-Where `<steer>` is a float from -1.0 (full left) to +1.0 (full right).
+| Field | Range | Description |
+|---|---|---|
+| `steer` | -1.0 to +1.0 | -1.0 = full left, +1.0 = full right |
+| `throttle` | 0.0 to 1.0 | 0.0 = released, 1.0 = fully pressed |
+| `brake` | 0.0 to 1.0 | 0.0 = released, 1.0 = fully pressed |
+
+> **Note:** The G29 pedal axes report -1.0 when fully pressed and +1.0 when released. The sender inverts this so that 1.0 always means fully pressed.
 
 ### Step 3 — Relay server forwards to the car
 
@@ -253,3 +260,16 @@ DAC 1 Ch D = brake2Base (1.51V) + brakeMag
 > The brake channels are always driven to their baseline voltages. Writing 0V is not the same as no brake and may be interpreted as a fault by the car's ECU.
 
 ---
+
+## Future Work
+
+### Multi-Camera Streaming with OBS
+
+The car-side setup currently has USB cameras available for a live video feed. To stream multiple camera angles simultaneously to a video call (e.g., Zoom), the recommended approach is:
+
+1. Connect all USB cameras to a laptop running **OBS Studio** (free, open-source — [obsproject.com](https://obsproject.com)).
+2. In OBS, add each camera as a separate **Video Capture Device** source and arrange them in a single scene (e.g., side-by-side or picture-in-picture).
+3. Enable **OBS Virtual Camera** (built into OBS — click **Start Virtual Camera** in the Controls panel).
+4. In Zoom (or any video call app), select **OBS Virtual Camera** as your camera source.
+
+The Zoom participant will see your OBS scene — all camera feeds composited into one stream — without you needing to share your screen.
