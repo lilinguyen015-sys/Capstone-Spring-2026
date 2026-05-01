@@ -1,0 +1,851 @@
+\documentclass[12pt, letterpaper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[most,breakable]{tcolorbox}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multicol}
+\setlength{\headheight}{14pt}
+
+% ── Colors ────────────────────────────────────────────────────────────────────
+\definecolor{warnorange}{RGB}{255,140,0}
+\definecolor{noteblue}{RGB}{30,100,200}
+\definecolor{codegray}{RGB}{245,245,245}
+\definecolor{darkgray}{RGB}{60,60,60}
+\definecolor{sectionrule}{RGB}{30,100,200}
+
+% ── Hyperref ──────────────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=noteblue,
+    urlcolor=noteblue,
+    pdftitle={Wireless Drive-By-Wire Design Document},
+    pdfauthor={Capstone Spring 2026}
+}
+
+% ── Code listings ─────────────────────────────────────────────────────────────
+\lstdefinestyle{terminal}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    framesep=6pt,
+    xleftmargin=8pt, xrightmargin=8pt,
+    aboveskip=8pt, belowskip=8pt
+}
+\lstdefinestyle{cpp}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{orange!80!black},
+    commentstyle=\color{green!50!black}\itshape,
+    language=C++,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    framesep=6pt,
+    xleftmargin=8pt, xrightmargin=8pt,
+    aboveskip=8pt, belowskip=8pt
+}
+\lstdefinestyle{python}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{orange!80!black},
+    commentstyle=\color{green!50!black}\itshape,
+    language=Python,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    framesep=6pt,
+    xleftmargin=8pt, xrightmargin=8pt,
+    aboveskip=8pt, belowskip=8pt
+}
+
+% ── Callout boxes ─────────────────────────────────────────────────────────────
+\newtcolorbox{warningbox}{
+    colback=warnorange!12, colframe=warnorange,
+    fonttitle=\bfseries, title={$\bigtriangleup$\ WARNING}, breakable
+}
+\newtcolorbox{notebox}{
+    colback=noteblue!8, colframe=noteblue,
+    fonttitle=\bfseries, title={Note}, breakable
+}
+\newtcolorbox{designbox}{
+    colback=gray!8, colframe=darkgray,
+    fonttitle=\bfseries, title={Design Decision}, breakable
+}
+
+% ── Header / Footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{darkgray}{Wireless Drive-By-Wire}}
+\fancyhead[R]{\small\textcolor{darkgray}{Design Document}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Section formatting ────────────────────────────────────────────────────────
+\titleformat{\section}{\large\bfseries}{}{0em}{\thesection\quad}[\vspace{2pt}\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{\thesubsection\quad}
+\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{}{0em}{\thesubsubsection\quad}
+\setcounter{secnumdepth}{3}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+% ── Title Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+
+  {\Huge\bfseries Wireless Drive-By-Wire\\[0.4em]
+  \Large Design Document}
+
+  \vspace{0.5cm}\rule{\linewidth}{0.5pt}\vspace{1cm}
+
+  {\large Capstone Spring 2026}\\[0.4cm]
+  {\normalsize ECE 4773 --- Senior Design}
+
+  \vspace{2cm}
+  \begin{tabular}{ll}
+    \textbf{Document Version:} & 1.0 \\
+    \textbf{Date:}             & May 2026 \\
+    \textbf{Audience:}         & Future developers, maintainers \\
+  \end{tabular}
+
+  \vfill
+
+  \begin{notebox}
+    This document is intended for engineers who need to \textbf{repair, modify,
+    or extend} the system.  It covers the internal hardware design, signal
+    mappings, control algorithm, network protocol, and known design limitations.
+    For operator instructions, see the separate \textit{User Manual}.
+  \end{notebox}
+
+  \vspace{1cm}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{System Overview}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The Wireless Drive-By-Wire (DBW) system replaces the mechanical inputs of a
+Nissan Leaf (steering wheel, throttle, brake pedal) with electronically generated
+analog voltages that the vehicle's ECU interprets as driver input.
+
+An operator uses a Logitech G29 racing wheel and pedals connected to a laptop.
+Control packets are transmitted over UDP through an Oracle Cloud relay server to an
+ESP32 microcontroller mounted on a custom PCB inside the vehicle.  The ESP32 reads
+the actual steering angle from the CAN bus and drives three systems:
+
+\begin{itemize}
+  \item \textbf{Steering} --- closed-loop PID, DAC voltages drive the power steering motor
+  \item \textbf{Throttle} --- open-loop, DAC voltages increase from a baseline
+  \item \textbf{Brake}    --- open-loop, DAC voltages decrease/increase from a baseline
+\end{itemize}
+
+\subsection{Top-Level Block Diagram}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\small\ttfamily
+\begin{tabular}{|c|c|c|c|c|}
+  \hline
+  \textrm{\textbf{G29}} & \textrm{USB} &
+  \textrm{\textbf{Laptop}} & \textrm{UDP/internet} &
+  \textrm{\textbf{OCI Relay Server}} \\
+  \hline
+  \multicolumn{5}{c}{$\downarrow$ WiFi UDP} \\
+  \hline
+  \multicolumn{2}{|c|}{\textrm{\textbf{ESP32 on PCB}}} &
+  \multicolumn{1}{c|}{CAN bus $\leftarrow$} &
+  \multicolumn{2}{c|}{\textrm{Nissan Leaf (CAN ID 0x2)}} \\
+  \hline
+  \multicolumn{2}{|c|}{DAC2 Ch C/D} &
+  \multicolumn{1}{c|}{DAC1 Ch A/B} &
+  \multicolumn{2}{c|}{DAC1 Ch C/D} \\
+  \hline
+  \multicolumn{2}{|c|}{Steering motor} &
+  \multicolumn{1}{c|}{Throttle actuator} &
+  \multicolumn{2}{c|}{Brake actuator} \\
+  \hline
+\end{tabular}
+\end{center}
+
+\subsection{File Map}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{File} & \textbf{Runs on} & \textbf{Role} \\
+  \midrule
+  \texttt{g29\_to\_server\_original.py} & Operator laptop & Read G29, send UDP \\
+  \texttt{relay\_server.py}             & OCI cloud VM    & Forward UDP packets \\
+  \texttt{esp32\_car.ino}               & ESP32 on PCB    & Control actuators \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Hardware Design}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Custom PCB}
+
+The custom DBW PCB integrates the following onto a single board:
+
+\begin{itemize}
+  \item ESP32-WROOM-32 DevKit V1 (footprint / header)
+  \item MCP2515 CAN bus controller (SPI) with 16\,MHz crystal
+  \item Two MCP4728 quad 12-bit I$^2$C DACs
+  \item Supporting passives (decoupling capacitors, pull-up resistors for I$^2$C)
+\end{itemize}
+
+The PCB was fabricated by JLCPCB (2-layer).
+
+\subsection{ESP32 Pin Assignments}
+
+\begin{center}
+\begin{tabular}{llll}
+  \toprule
+  \textbf{ESP32 Pin} & \textbf{Signal} & \textbf{Interface} & \textbf{Connected to} \\
+  \midrule
+  18  & SPI SCK  & SPI  & MCP2515 SCK \\
+  19  & SPI MISO & SPI  & MCP2515 SO \\
+  23  & SPI MOSI & SPI  & MCP2515 SI \\
+  5   & CAN CS   & SPI  & MCP2515 \(\overline{\text{CS}}\) \\
+  4   & CAN INT  & GPIO & MCP2515 INT (active-low) \\
+  21  & I2C1 SDA & I$^2$C bus 0 & DAC 1 (MCP4728 @ 0x60) \\
+  22  & I2C1 SCL & I$^2$C bus 0 & DAC 1 (MCP4728 @ 0x60) \\
+  33  & I2C2 SDA & I$^2$C bus 1 & DAC 2 (MCP4728 @ 0x60) \\
+  32  & I2C2 SCL & I$^2$C bus 1 & DAC 2 (MCP4728 @ 0x60) \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+Both DACs share the same I$^2$C address (\texttt{0x60}).  They are disambiguated
+by being placed on \emph{separate} I$^2$C buses: \texttt{W1} (TwoWire instance 0)
+and \texttt{W2} (TwoWire instance 1).  If you ever replace a DAC, verify that its
+address pins (A0, A1, A2) are all grounded so it enumerates as \texttt{0x60}.
+\end{notebox}
+
+\subsection{MCP2515 CAN Controller}
+
+The MCP2515 communicates with the ESP32 over SPI and with the vehicle over the
+OBD-II CAN bus.
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Parameter} & \textbf{Value} \\
+  \midrule
+  CAN bus speed    & 500\,kbps (\texttt{CAN\_500KBPS}) \\
+  Crystal frequency & 16\,MHz (\texttt{MCP\_16MHZ}) \\
+  Operating mode   & Normal (\texttt{MCP\_NORMAL}) \\
+  Filter           & None (\texttt{MCP\_ANY} --- all IDs accepted) \\
+  INT pin polarity & Active-low; triggers on any received frame \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+The firmware uses \texttt{MCP\_16MHZ}.  If the PCB crystal is ever replaced, it
+\textbf{must} be 16\,MHz, not 8\,MHz.  A mismatch silently corrupts CAN timing;
+the symptom is that \texttt{currentSTA} never updates and steering drives to its
+limit.
+\end{warningbox}
+
+\subsection{MCP4728 DAC Configuration}
+
+Both DACs are configured identically: internal voltage reference with $2\times$ gain.
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Parameter} & \textbf{Setting} & \textbf{Effect} \\
+  \midrule
+  Voltage reference & \texttt{MCP4728\_VREF\_INTERNAL} & Uses 2.048\,V internal ref \\
+  Gain              & \texttt{MCP4728\_GAIN\_2X}        & Full scale = $2\times2.048 = 4.096$\,V \\
+  Resolution        & 12-bit                             & $4096$ steps, $\approx$1\,mV/step \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+These settings are written in \texttt{initDACChannels()} and saved to the DACs'
+internal EEPROM via \texttt{saveToEEPROM()} so they survive power cycling.
+
+\subsubsection*{Converting Voltage to DAC Count}
+
+\[
+  \text{DAC count} = \left\lfloor \frac{V_{\text{target}}}{4.096} \times 4095
+  \right\rfloor
+\]
+
+The firmware stores the reference voltage as \texttt{float proper = 4.096} and
+applies this formula in \texttt{updateBaseVoltages()} every loop iteration.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Signal Mapping and Baseline Voltages}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{DAC Channel Assignments}
+
+\begin{center}
+\begin{tabular}{llllrr}
+  \toprule
+  \textbf{Variable} & \textbf{DAC} & \textbf{Ch} & \textbf{Function}
+    & \textbf{Baseline V} & \textbf{DAC count} \\
+  \midrule
+  \texttt{steer1}   & DAC 2 & C & Steering main  & 2.47\,V & 2473 \\
+  \texttt{steer2}   & DAC 2 & D & Steering sub   & 2.47\,V & 2473 \\
+  \texttt{accel1Base} & DAC 1 & A & Throttle main & 0.37\,V & 370  \\
+  \texttt{accel2Base} & DAC 1 & B & Throttle sub  & 0.75\,V & 750  \\
+  \texttt{brake1Base} & DAC 1 & C & Brake main    & 3.42\,V & 3417 \\
+  \texttt{brake2Base} & DAC 1 & D & Brake sub     & 1.51\,V & 1509 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+\texttt{updateBaseVoltages()} is called once per loop.  Although the values are
+constant, keeping it in the loop makes them easy to change to live-tunable
+variables in the future (e.g., read from a serial command).
+\end{notebox}
+
+\subsection{Steering Output (Push-Pull)}
+
+The steering motor is driven push-pull: one DAC channel raises above midpoint while
+the other drops by the same amount.  The motor controller interprets the voltage
+\emph{difference} as torque magnitude and direction.
+
+\begin{align*}
+  \text{DAC 2, Ch C} &= \texttt{steer1} + \texttt{torque} \\
+  \text{DAC 2, Ch D} &= \texttt{steer2} - \texttt{torque}
+\end{align*}
+
+At zero torque both channels output 2.47\,V and the motor is stationary.
+\texttt{torque} is clamped to $\pm1500$ DAC counts ($\approx\pm1.5$\,V swing).
+
+\subsection{Throttle Output}
+
+\[
+  \texttt{accelMag} = \lfloor\texttt{throttle} \times 300\rfloor \quad (0\text{--}300)
+\]
+
+\begin{align*}
+  \text{DAC 1, Ch A} &= \texttt{accel1Base} + \texttt{accelMag} \\
+  \text{DAC 1, Ch B} &= \texttt{accel2Base} + 2 \times \texttt{accelMag}
+\end{align*}
+
+Channel B receives twice the offset of channel A.  This mimics the dual-channel
+pedal sensor redundancy scheme used by the Nissan Leaf's original pedal assembly
+(primary and secondary sensors track each other with a 2:1 voltage ratio).
+
+\subsection{Brake Output}
+
+\[
+  \texttt{brakeMag} = \lfloor\texttt{brake} \times 900\rfloor \quad (0\text{--}900)
+\]
+
+\begin{align*}
+  \text{DAC 1, Ch C} &= \texttt{brake1Base} - \texttt{brakeMag} \\
+  \text{DAC 1, Ch D} &= \texttt{brake2Base} + \texttt{brakeMag}
+\end{align*}
+
+\begin{warningbox}
+The brake channels must \textbf{never} be written to 0\,V.  The vehicle ECU
+monitors both brake sensor voltages; if either reads 0\,V it interprets this as
+a broken wire (sensor fault) and may disable throttle or engage a failsafe.
+The baseline voltages (3.42\,V and 1.51\,V) are the ``no braking'' idle state,
+not 0\,V.
+\end{warningbox}
+
+\subsection{All Outputs Clamped}
+
+Every DAC output is passed through \texttt{constrain(value, 0, 4095)} inside
+\texttt{sendOutputs()} before being written.  This prevents integer overflow
+from wrapping a count above 4095 back to a small positive value.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{CAN Bus Interface}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Steering Angle Message}
+
+The Nissan Leaf broadcasts the steering angle on CAN ID \texttt{0x2}.
+
+\begin{center}
+\begin{tabular}{llll}
+  \toprule
+  \textbf{Byte(s)} & \textbf{Type} & \textbf{Endian} & \textbf{Scaling} \\
+  \midrule
+  0--1 & \texttt{int16} & Little-endian & $\div 10$ = degrees \\
+  2--7 & (unused) & --- & --- \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Parsed in firmware as:
+
+\begin{lstlisting}[style=cpp]
+currentSTA = (int16_t)((buf[0]) | (buf[1] << 8)) / 10;
+\end{lstlisting}
+
+\texttt{currentSTA} is a signed 16-bit integer representing steering angle in
+tenths of a degree, divided to give degrees directly.  Positive values are
+right-of-center; negative values are left-of-center (confirm the sign convention
+during initial vehicle testing).
+
+\subsection{Reading Strategy}
+
+The firmware polls the MCP2515 INT pin (active-low, GPIO 4) every loop.
+When the pin is low, a frame is waiting; the firmware reads and filters for
+ID \texttt{0x2}.  All other IDs are silently discarded (\texttt{MCP\_ANY} mode
+accepts everything, but only \texttt{0x2} is stored).
+
+\begin{notebox}
+If you need to capture additional CAN signals (speed, gear position, etc.),
+add more \texttt{if (id == 0xXX)} branches inside \texttt{readCAN()}.  No
+filter reconfiguration is needed because the firmware already accepts all IDs.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Steering PID Control Loop}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Loop Structure}
+
+The control loop runs in the Arduino \texttt{loop()} function at the MCU's
+natural speed (no fixed rate delay).  Loop timing is measured via
+\texttt{micros()} and passed as \texttt{dt} (seconds) into the PID.  Values of
+\texttt{dt} outside $(0, 1)$ are clamped to 0.01\,s to prevent divide-by-zero
+or derivative spikes on startup.
+
+\subsection{Target Calculation and Smoothing}
+
+\[
+  \texttt{targetSTA} = \texttt{steering} \times 250 \quad (\text{degrees})
+\]
+
+A first-order IIR low-pass filter smooths the target before it enters the PID:
+
+\[
+  \texttt{smoothTarget}_{k} = \texttt{smoothTarget}_{k-1}
+    + \alpha \cdot (\texttt{targetSTA} - \texttt{smoothTarget}_{k-1})
+\]
+
+where $\alpha = 10 \cdot dt$.  At a typical loop rate of $\sim$1\,ms,
+$\alpha \approx 0.01$, giving a time constant of $\tau = 1/10 = 100$\,ms.
+
+\begin{notebox}
+The smoothing filter prevents abrupt steering commands (e.g., from a dropped and
+re-received packet with a large position jump) from immediately spiking the PID
+output.  Reducing the coefficient (e.g., $5 \cdot dt$) makes steering feel
+``heavier''; increasing it makes it more responsive.
+\end{notebox}
+
+\subsection{PID Gains}
+
+\begin{center}
+\begin{tabular}{llll}
+  \toprule
+  \textbf{Gain} & \textbf{Variable} & \textbf{Value} & \textbf{Units} \\
+  \midrule
+  Proportional & \texttt{kp} & 3.6  & DAC counts / degree \\
+  Integral     & \texttt{ki} & 0.05 & DAC counts / (degree$\cdot$s) \\
+  Derivative   & \texttt{kd} & 0.1  & DAC counts$\cdot$s / degree \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Anti-Windup and Clamping}
+
+The firmware implements two windup-prevention measures:
+
+\begin{enumerate}
+  \item \textbf{Dead band reset}: if $|\text{error}| < 2°$, the integral is reset
+        to zero.  This prevents integrator drift from accumulated small errors near
+        the target.
+  \item \textbf{Conditional integration}: the integral accumulates only when the
+        proportional term alone has not saturated the output (i.e.,
+        $|k_p e + k_i I| < \texttt{maxTorque}$).
+  \item \textbf{Integral clamp}: the integral is hard-clamped to $\pm250$
+        DAC counts after each update.
+\end{enumerate}
+
+The final output is clamped to $\pm1500$ DAC counts (\texttt{maxTorque}):
+
+\[
+  \texttt{torque} = \text{clamp}\!\left(
+    k_p e + k_i I + k_d \dot{e},\;
+    -1500,\; +1500
+  \right)
+\]
+
+\subsection{PID Tuning Guide}
+
+If you modify the vehicle or steering motor, you will likely need to re-tune.
+Follow this sequence on a \textbf{stationary vehicle}:
+
+\begin{enumerate}
+  \item Set \texttt{ki = 0} and \texttt{kd = 0}.  Increase \texttt{kp} until
+        steering reaches the target but oscillates.
+  \item Back off \texttt{kp} by $\sim$20\%.
+  \item Increase \texttt{kd} until oscillation is damped.
+  \item Restore a small \texttt{ki} (start at 0.01) to eliminate steady-state error.
+  \item Validate at low speed before testing at higher speeds.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Network Architecture}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Why a Relay Server?}
+
+The ESP32 connects to a mobile hotspot.  Mobile carriers perform Network Address
+Translation (NAT): the ESP32 has a private IP on the hotspot LAN and a shared
+public IP assigned to the carrier's gateway.  It is unreachable from the internet
+by direct address.
+
+The relay server solves this via \textbf{UDP hole-punching}:
+
+\begin{enumerate}
+  \item The ESP32 sends a \texttt{HEARTBEAT} packet to the OCI server every 2\,s.
+        Because the packet originates from the ESP32, the hotspot's NAT table
+        creates a mapping: \textit{(public IP : ephemeral port)} $\leftrightarrow$
+        \textit{ESP32 private IP}.
+  \item The relay server records the ESP32's source address and port from the
+        arriving \texttt{HEARTBEAT}.
+  \item When a \texttt{CMD} packet arrives from the operator laptop, the relay
+        forwards it to that recorded address.  The hotspot's NAT entry still
+        exists (kept alive by the 2\,s heartbeat), so the packet is delivered.
+\end{enumerate}
+
+\subsection{Relay Server Logic}
+
+\begin{lstlisting}[style=python]
+if message == "HEARTBEAT":
+    car_address = addr          # register / refresh ESP32 endpoint
+elif car_address and addr != car_address:
+    sock.sendto(data, car_address)  # forward operator packet to car
+\end{lstlisting}
+
+Any packet originating \emph{from} the car (\texttt{addr == car\_address}) that
+is not a \texttt{HEARTBEAT} is silently dropped.  This prevents the car from
+accidentally feeding data back to itself if it ever sends non-heartbeat traffic.
+
+\subsection{Packet Protocol}
+
+All packets are plain UTF-8 text, terminated with the UDP packet boundary
+(no newline needed).
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Direction} & \textbf{Format} & \textbf{Notes} \\
+  \midrule
+  ESP32 $\to$ Server & \texttt{HEARTBEAT} & Sent every 2\,s \\
+  Laptop $\to$ Server & \texttt{CMD;\textit{seq};\textit{steer};\textit{throttle};\textit{brake}}
+    & Sent at 60\,Hz \\
+  Server $\to$ ESP32 & \textit{(forwarded CMD verbatim)} & No modification \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{llll}
+  \toprule
+  \textbf{Field} & \textbf{Type} & \textbf{Range} & \textbf{Description} \\
+  \midrule
+  \texttt{seq}      & uint32  & 0, 1, 2\ldots & Monotonic counter; starts at 0 \\
+  \texttt{steer}    & float32 & $-1.0\ldots+1.0$ & $-1.0=$ full left \\
+  \texttt{throttle} & float32 & $0.0\ldots1.0$   & $0.0=$ released \\
+  \texttt{brake}    & float32 & $0.0\ldots1.0$   & $0.0=$ released \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The ESP32 parses with \texttt{sscanf}:
+
+\begin{lstlisting}[style=cpp]
+sscanf(packetBuffer, "CMD;%lu;%f;%f;%f", &seq, &s, &t, &b)
+\end{lstlisting}
+
+There is no sequence-number validation or out-of-order rejection in the current
+firmware.  If a late packet arrives it will overwrite the current control state.
+
+\subsection{Network Configuration}
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Parameter} & \textbf{Value} \\
+  \midrule
+  Relay server public IP & \texttt{147.224.143.221} \\
+  UDP port (all parties) & \texttt{4210} \\
+  Sender rate            & 60\,Hz \\
+  Heartbeat interval     & 2\,s \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Software Architecture}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{\texttt{g29\_to\_server\_original.py} (Operator Laptop)}
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Constant}          & \textbf{Value / Description} \\
+  \midrule
+  \texttt{STEER\_AXIS\_INDEX}    & 0 --- steering wheel axis \\
+  \texttt{THROTTLE\_AXIS\_INDEX} & 2 --- throttle pedal axis \\
+  \texttt{BRAKE\_AXIS\_INDEX}    & 3 --- brake pedal axis \\
+  \texttt{SERVER\_IP}           & \texttt{147.224.143.221} \\
+  \texttt{SERVER\_PORT}         & 4210 \\
+  \texttt{REFRESH\_HZ}          & 60 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The G29 pedal axes report \texttt{+1.0} when \emph{released} and \texttt{-1.0}
+when \emph{fully pressed}.  The sender normalizes and inverts:
+
+\begin{lstlisting}[style=python]
+def normalize_01_from_minus1_1(val: float) -> float:
+    return max(0.0, min(1.0, (val + 1.0) / 2.0))
+
+throttle = 1.0 - normalize_01_from_minus1_1(joystick.get_axis(2))
+brake    = 1.0 - normalize_01_from_minus1_1(joystick.get_axis(3))
+\end{lstlisting}
+
+Step-by-step for the \textbf{throttle pedal fully pressed}
+(axis reports \texttt{-1.0}):
+\begin{enumerate}
+  \item \texttt{normalize\_01(-1.0)} $= ((-1)+1)/2 = 0.0$
+  \item \texttt{throttle} $= 1.0 - 0.0 = 1.0$
+\end{enumerate}
+
+Step-by-step for the \textbf{throttle pedal released}
+(axis reports \texttt{+1.0}):
+\begin{enumerate}
+  \item \texttt{normalize\_01(+1.0)} $= ((+1)+1)/2 = 1.0$
+  \item \texttt{throttle} $= 1.0 - 1.0 = 0.0$
+\end{enumerate}
+
+Steering is passed through \emph{without} normalization; the G29 steering axis
+already reports \texttt{-1.0} (full left) to \texttt{+1.0} (full right).
+
+\subsection{\texttt{relay\_server.py} (OCI Cloud VM)}
+
+Minimal single-socket server.  Runs on \texttt{0.0.0.0:4210}.  The only state
+it maintains is \texttt{car\_address} --- the most recently seen
+\texttt{HEARTBEAT} source.  All non-HEARTBEAT packets arriving from an address
+other than \texttt{car\_address} are forwarded verbatim.
+
+\begin{designbox}
+The relay server does not time out \texttt{car\_address}.  If the ESP32
+reboots and obtains a new public IP/port from the hotspot, the first new
+\texttt{HEARTBEAT} will update the stored address.  There is no danger of
+sending packets to a stale address indefinitely.
+\end{designbox}
+
+The server also prints a \texttt{DEBUG} line for every received packet.
+This is intentional for initial development but will flood the console during
+normal operation.  To silence it, remove or comment out the two
+\texttt{print(f"DEBUG...")} lines.
+
+\subsection{\texttt{esp32\_car.ino} (ESP32 on PCB)}
+
+\subsubsection*{Setup Sequence}
+
+\begin{enumerate}
+  \item \texttt{Serial.begin(115200)}
+  \item Initialize I$^2$C buses (W1 on 21/22, W2 on 33/32, both at 400\,kHz)
+  \item Initialize DAC 1 and DAC 2 (\texttt{begin(0x60, \&W1/W2)})
+  \item \texttt{initDACChannels()} --- write initial DAC values + save to EEPROM
+  \item \texttt{initCAN()} --- start SPI and MCP2515 at 500\,kbps / 16\,MHz
+  \item \texttt{initWiFi()} --- connect to hotspot, start UDP listener on port 4210
+\end{enumerate}
+
+\subsubsection*{Main Loop Sequence (per iteration)}
+
+\begin{enumerate}
+  \item Compute \texttt{dt} from \texttt{micros()} delta
+  \item Send \texttt{HEARTBEAT} if $>2000$\,ms since last heartbeat
+  \item \texttt{receiveUDP()} --- parse latest \texttt{CMD} packet into
+        \texttt{steering}, \texttt{throttle}, \texttt{brake}
+  \item \texttt{readCAN()} --- update \texttt{currentSTA} from CAN ID \texttt{0x2}
+  \item \texttt{updateBaseVoltages()} --- recompute DAC baseline counts
+  \item Constrain \texttt{steering}, \texttt{throttle}, \texttt{brake}
+  \item Compute \texttt{targetSTA}, apply low-pass filter to \texttt{smoothTarget}
+  \item Compute \texttt{accelMag} and \texttt{brakeMag}
+  \item \texttt{calcTorque(smoothTarget, currentSTA, dt)} --- run PID
+  \item \texttt{sendOutputs()} --- write all six DAC values
+  \item Print debug to Serial every 100\,ms
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Known Limitations and Design Decisions}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{No Watchdog / Failsafe}
+
+\begin{warningbox}
+There is \textbf{no watchdog timer} in the current firmware.  If the operator
+laptop stops sending packets (network drop, crash, Ctrl+C), the ESP32 continues
+targeting the \textbf{last received} steering angle, throttle, and brake values
+indefinitely.  This means the car will continue accelerating and steering at its
+last commanded state until the safety driver intervenes.
+\end{warningbox}
+
+A simple fix is to timestamp the last received packet and reset all control
+variables to zero if no packet arrives within a timeout:
+
+\begin{lstlisting}[style=cpp]
+#define WATCHDOG_MS 200
+unsigned long lastPacketMs = 0;
+
+// In receiveUDP(), after successful parse:
+lastPacketMs = millis();
+
+// In loop(), after receiveUDP():
+if (millis() - lastPacketMs > WATCHDOG_MS) {
+    steering = 0.0f;
+    throttle = 0.0f;
+    brake    = 0.0f;
+    integral = 0.0f;  // reset PID integrator
+}
+\end{lstlisting}
+
+\subsection{Open-Loop Throttle and Brake}
+
+Throttle and brake are driven open-loop: there is no speed sensor feedback.
+The DAC offsets were determined empirically on the test vehicle.  If the vehicle
+or actuators change, the scaling factors (300 for throttle, 900 for brake) will
+need to be re-calibrated.
+
+\subsection{EEPROM Initialization Mismatch}
+
+\texttt{initDACChannels()} writes initial values to EEPROM that do \emph{not}
+match the runtime channel assignments.  For example, it writes steering midpoint
+values to DAC\,1 channels C/D, but during runtime DAC\,1 Ch\,C/D drive the
+brake.  This is harmless because the firmware immediately overwrites all channels
+via \texttt{fastWrite()} on the first loop iteration.  However, if the ESP32
+powers up without running \texttt{loop()} (e.g., it crashes in \texttt{setup()}),
+the EEPROM-default outputs may be unexpected.  A future revision should align the
+EEPROM values with the runtime assignments.
+
+\subsection{DEBUG Prints in relay\_server.py}
+
+The relay server prints a debug line for \emph{every} received UDP packet:
+
+\begin{lstlisting}[style=terminal]
+DEBUG - Received: 'CMD;0;0.0000;0.0000;0.0000' from ('1.2.3.4', 54321)
+\end{lstlisting}
+
+At 60\,Hz this generates 60 lines per second and will fill terminal scrollback
+quickly.  Remove the two \texttt{print(f"DEBUG...")} lines once the system is
+confirmed working.
+
+\subsection{Relay Server Has No Timeout on Car Address}
+
+If the car physically moves out of hotspot range, \texttt{car\_address} in the
+relay server is never cleared.  CMD packets from the operator will be silently
+forwarded to a stale address with no error shown.  The operator only notices
+because the car stops responding.  A future revision should print a warning
+if no \texttt{HEARTBEAT} is received within $\sim$10\,s.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Modification Guide}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Changing WiFi Credentials}
+
+In \texttt{esp32\_car.ino}, update and re-flash:
+
+\begin{lstlisting}[style=cpp]
+const char* ssid     = "NEW_SSID";
+const char* password = "NEW_PASSWORD";
+\end{lstlisting}
+
+\subsection{Changing the Relay Server IP or Port}
+
+\textbf{In \texttt{esp32\_car.ino}:}
+\begin{lstlisting}[style=cpp]
+const char* serverIP = "NEW.IP.ADDRESS";
+const int   serverPort = NEW_PORT;
+\end{lstlisting}
+
+\textbf{In \texttt{g29\_to\_server\_original.py}:}
+\begin{lstlisting}[style=python]
+SERVER_IP   = "NEW.IP.ADDRESS"
+SERVER_PORT = NEW_PORT
+\end{lstlisting}
+
+Both files must be updated.  The relay server binds to \texttt{0.0.0.0} and uses
+whatever port is defined in \texttt{UDP\_PORT}, so update that constant too if
+you change the port.
+
+\subsection{Adjusting Throttle and Brake Scaling}
+
+The scaling factors are literal constants in \texttt{loop()}:
+
+\begin{lstlisting}[style=cpp]
+accelMag = pedalMagnitude(appliedThrottle, 300.0f);  // max offset = 300
+brakeMag = pedalMagnitude(appliedBrake,    900.0f);  // max offset = 900
+\end{lstlisting}
+
+Increase the second argument to increase the maximum actuator travel.
+Verify that the resulting DAC count (\texttt{accel1Base + accelMag}) does not
+exceed 4095 at full input, or the \texttt{constrain()} in \texttt{sendOutputs()}
+will clip it.
+
+\subsection{Reading Additional CAN Signals}
+
+Add cases inside \texttt{readCAN()}:
+
+\begin{lstlisting}[style=cpp]
+if (id == 0x2) {
+    currentSTA = (int16_t)((buf[0]) | (buf[1] << 8)) / 10;
+}
+// Example: read vehicle speed from a different CAN ID
+if (id == 0x1B4) {
+    vehicleSpeed = (buf[0] | (buf[1] << 8)) * 0.01f;  // example scaling
+}
+\end{lstlisting}
+
+No filter configuration is needed because the MCP2515 is in \texttt{MCP\_ANY}
+mode.
+
+\subsection{Adding the Watchdog}
+
+See Section~9.1 for the recommended code snippet.  After adding it, test by
+unplugging the laptop's network cable with the car stationary and confirming
+that all actuators return to their idle state within 200\,ms.
+
+\end{document}

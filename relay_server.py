@@ -1,38 +1,47 @@
+"""
+UDP Relay Server.
+
+Runs on an Oracle Cloud instance and acts as a middleman between the
+operator laptop and the ESP32 in the vehicle.  The ESP32 registers
+itself by sending periodic HEARTBEAT packets; the server forwards all
+other incoming packets to the last registered ESP32 address.
+"""
+
 import socket
 
-# Define where the server listens
 UDP_IP = "0.0.0.0"
 UDP_PORT = 4210
 
-# Create the network socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((UDP_IP, UDP_PORT))
 
-print(f"Relay server live on port {UDP_PORT}. Waiting for car heartbeat...")
+def main():
+    """Start the relay server and forward packets indefinitely."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((UDP_IP, UDP_PORT))
 
-car_address = None
+    print(
+        f"Relay server live on port {UDP_PORT}. Waiting for car heartbeat..."
+    )
 
-while True:
-    # Wait to receive a packet of data
-    data, addr = sock.recvfrom(1024)
-    
-    try:
-        # Convert bytes to text and STRIP invisible newlines/spaces
-        message = data.decode('utf-8').strip()
-        
-        # DEBUG: Print exactly what we just received and from who
-        print(f"DEBUG - Received: '{message}' from {addr}")
-        
-    except UnicodeDecodeError:
-        message = ""
-        # DEBUG: If it's raw bytes (like steering data)
-        print(f"DEBUG - Received raw bytes from {addr}")
+    car_address = None
 
-    # Check if the packet is from the ESP32 Car
-    if message == "HEARTBEAT":
-        car_address = addr
-        print(f"✅ CAR CONNECTED! Logged IP: {addr}")
-        
-    # If we know where the car is, forward the data (make sure we don't bounce the heartbeat back to the car)
-    elif car_address and addr != car_address:
-        sock.sendto(data, car_address)
+    while True:
+        data, addr = sock.recvfrom(1024)
+
+        try:
+            message = data.decode("utf-8").strip()
+            print(f"DEBUG - Received: '{message}' from {addr}")
+        except UnicodeDecodeError:
+            message = ""
+            print(f"DEBUG - Received raw bytes from {addr}")
+
+        if message == "HEARTBEAT":
+            car_address = addr
+            print(f"✅ CAR CONNECTED! Logged IP: {addr}")
+        elif car_address and addr != car_address:
+            # Forward CMD packets from the operator to the car.
+            # Do not bounce HEARTBEAT back to the ESP32.
+            sock.sendto(data, car_address)
+
+
+if __name__ == "__main__":
+    main()

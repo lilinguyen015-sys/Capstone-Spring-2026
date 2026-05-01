@@ -1,0 +1,516 @@
+﻿\documentclass[12pt, letterpaper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[most,breakable]{tcolorbox}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\setlength{\headheight}{14pt}
+
+% ── Colors ────────────────────────────────────────────────────────────────────
+\definecolor{warnorange}{RGB}{255,140,0}
+\definecolor{dangerred}{RGB}{200,30,30}
+\definecolor{noteblue}{RGB}{30,100,200}
+\definecolor{codegray}{RGB}{245,245,245}
+\definecolor{darkgray}{RGB}{60,60,60}
+
+% ── Hyperref ──────────────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=noteblue,
+    urlcolor=noteblue,
+    pdftitle={Wireless Drive-By-Wire User Manual},
+    pdfauthor={Capstone Spring 2026}
+}
+
+% ── Code listings ─────────────────────────────────────────────────────────────
+\lstdefinestyle{terminal}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    framesep=6pt,
+    xleftmargin=8pt,
+    xrightmargin=8pt,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+\lstdefinestyle{cpp}{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{orange!80!black},
+    commentstyle=\color{green!50!black}\itshape,
+    language=C++,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray},
+    framesep=6pt,
+    xleftmargin=8pt,
+    xrightmargin=8pt,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+
+% ── Callout boxes ─────────────────────────────────────────────────────────────
+\newtcolorbox{warningbox}{
+    colback=warnorange!12,
+    colframe=warnorange,
+    fonttitle=\bfseries,
+    title={$\bigtriangleup$\ WARNING},
+    breakable
+}
+\newtcolorbox{dangerbox}{
+    colback=dangerred!10,
+    colframe=dangerred,
+    fonttitle=\bfseries,
+    title={!! DANGER},
+    breakable
+}
+\newtcolorbox{notebox}{
+    colback=noteblue!8,
+    colframe=noteblue,
+    fonttitle=\bfseries,
+    title={Note},
+    breakable
+}
+
+% ── Header / Footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{darkgray}{Wireless Drive-By-Wire}}
+\fancyhead[R]{\small\textcolor{darkgray}{User Manual}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Section formatting ────────────────────────────────────────────────────────
+\titleformat{\section}{\large\bfseries}{}{0em}{\thesection\quad}[\vspace{2pt}\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{\thesubsection\quad}
+\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{}{0em}{\thesubsubsection\quad}
+\setcounter{secnumdepth}{3}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+% ── Title Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+
+  {\Huge\bfseries Wireless Drive-By-Wire\\[0.4em]
+  \Large User Manual}
+
+  \vspace{0.5cm}\rule{\linewidth}{0.5pt}\vspace{1cm}
+
+  {\large Capstone Spring 2026}\\[0.4cm]
+  {\normalsize ECE 4773 --- Senior Design}
+
+  \vspace{2cm}
+  \begin{tabular}{ll}
+    \textbf{Document Version:} & 1.0 \\
+    \textbf{Date:}             & May 2026 \\
+    \textbf{Status:}           & Final \\
+  \end{tabular}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The Wireless Drive-By-Wire (DBW) system allows an operator to remotely steer,
+accelerate, and brake a Nissan Leaf using a Logitech G29 racing wheel and pedal set
+connected to a laptop anywhere with an internet connection.
+
+Control inputs are captured at \textbf{60\,Hz}, transmitted over UDP to a cloud relay
+server hosted on Oracle Cloud Infrastructure (OCI), and forwarded to an ESP32
+microcontroller installed on a custom PCB inside the vehicle.  The ESP32 runs a
+closed-loop PID controller for steering---reading the actual steering angle from the
+vehicle's CAN bus---and drives open-loop throttle and brake actuators through dual
+MCP4728 digital-to-analog converters (DACs).
+
+\subsection{System Architecture}
+
+\begin{center}
+\small\ttfamily
+\begin{tabular}{ccccc}
+  \textrm{[Driver Side]} &&\textrm{[Cloud]}&&\textrm{[Car Side]}\\[4pt]
+  G29 + Laptop &$\xrightarrow{\text{UDP / internet}}$& OCI Relay Server
+               &$\xrightarrow{\text{WiFi UDP}}$& ESP32 on PCB\\
+  \small\textrm{g29\_to\_server\_original.py} && \small\textrm{relay\_server.py}
+               && $\downarrow$\\
+               &&&&\textrm{DAC outputs}\\
+               &&&&$\downarrow$\\
+               &&&&\textrm{Steer / Throttle / Brake}
+\end{tabular}
+\end{center}
+
+The relay server is required because the ESP32 is behind a mobile hotspot with no
+public IP.  The ESP32 registers itself via periodic \texttt{HEARTBEAT} packets;
+the relay server records that public endpoint and uses it to forward incoming
+\texttt{CMD} packets from the operator (UDP hole-punching).
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Safety}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{dangerbox}
+\begin{itemize}[leftmargin=*]
+  \item A trained safety driver \textbf{must} be seated and belted in the vehicle at all times.
+  \item The safety driver must be ready to take manual control \textbf{immediately}.
+  \item \textbf{Never} operate on public roads.  Use only a closed, controlled area.
+  \item \textbf{Never} exceed walking pace during initial testing.
+  \item Keep all bystanders at least \textbf{50 feet} from the vehicle at all times.
+\end{itemize}
+\end{dangerbox}
+
+\begin{warningbox}
+\begin{itemize}[leftmargin=*]
+  \item If the operator laptop stops sending (Ctrl+C or network loss), the ESP32
+        has no watchdog --- it will continue targeting the \textbf{last commanded}
+        steering angle, throttle, and brake indefinitely.  The safety driver must
+        take manual control immediately if the connection is interrupted.
+  \item Writing 0\,V to the brake DAC channels is \textbf{not} a neutral state and may
+        be interpreted as a fault by the vehicle ECU.  The firmware always drives brake
+        channels to their baseline voltages.
+  \item Do not modify PID gains without re-validating on a stationary vehicle first.
+\end{itemize}
+\end{warningbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Hardware Overview}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Component List}
+
+\begin{longtable}{>{\bfseries}p{4.6cm}p{1.2cm}p{7.4cm}}
+  \toprule
+  \textbf{Component} & \textbf{Qty} & \textbf{Notes}\\
+  \midrule\endhead\bottomrule\endfoot
+  Nissan Leaf (2015--2018)          & 1 & Vehicle under control; CAN ID \texttt{0x2} carries steering angle\\[3pt]
+  Logitech G29 Wheel + Pedals       & 1 & USB to operator laptop\\[3pt]
+  Operator Laptop                   & 1 & Any Python 3.8+ capable machine\\[3pt]
+  ESP32 DevKit V1                   & 1 & Mounted on custom DBW PCB inside vehicle\\[3pt]
+  Custom DBW PCB                    & 1 & Houses ESP32, CAN controller, and both DACs\\[3pt]
+  MCP2515 CAN Controller            & 1 & On-board; reads steering angle via SPI\\[3pt]
+  MCP4728 DAC $\times$2             & 2 & On-board; drives steering, throttle, brake\\[3pt]
+  Mobile Hotspot                    & 1 & Provides WiFi to the ESP32 in the vehicle\\[3pt]
+  OCI Relay Server                  & 1 & Oracle Cloud VM; UDP port 4210 must be open\\
+\end{longtable}
+
+\subsection{ESP32 Pin Reference}
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Signal} & \textbf{ESP32 Pin}\\
+  \midrule
+  SPI SCK  & 18\\
+  SPI MISO & 19\\
+  SPI MOSI & 23\\
+  CAN CS   & 5\\
+  CAN INT  & 4\\
+  I2C Bus~1 SDA / SCL (DAC~1) & 21 / 22\\
+  I2C Bus~2 SDA / SCL (DAC~2) & 33 / 32\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{DAC Channel Assignments}
+
+\begin{center}
+\begin{tabular}{llll}
+  \toprule
+  \textbf{DAC} & \textbf{Ch} & \textbf{Function} & \textbf{Baseline}\\
+  \midrule
+  DAC~2 & C & Steering main & 2.47\,V\\
+  DAC~2 & D & Steering sub  & 2.47\,V\\
+  DAC~1 & A & Throttle main & 0.37\,V\\
+  DAC~1 & B & Throttle sub  & 0.75\,V\\
+  DAC~1 & C & Brake main    & 3.42\,V\\
+  DAC~1 & D & Brake sub     & 1.51\,V\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+All DAC channels use the MCP4728 internal voltage reference
+(\texttt{MCP4728\_VREF\_INTERNAL}) with $2\times$ gain, giving a full-scale output of
+4.096\,V and 12-bit resolution ($\approx$1\,mV/step).
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Software Installation}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Operator Laptop}
+
+Install Python 3.8 or newer, then install the only required library:
+
+\begin{lstlisting}[style=terminal]
+pip install pygame
+\end{lstlisting}
+
+The server IP is already configured in \texttt{g29\_to\_server\_original.py}.
+
+\subsection{OCI Relay Server}
+
+The relay server uses only the Python standard library:
+
+\begin{lstlisting}[style=terminal]
+python3 relay_server.py
+\end{lstlisting}
+
+Verify that UDP port \textbf{4210} is open in both the OCI Security List and the
+instance firewall (\texttt{iptables} / \texttt{firewalld}).
+
+\subsection{ESP32 Firmware}
+
+\subsubsection*{Required Tools}
+
+\begin{itemize}
+  \item Arduino IDE 2.x
+  \item ESP32 board support package (install via \textbf{File\,$\to$\,Preferences\,$\to$\,Additional
+        Board Manager URLs}, then search ``esp32'' in \textbf{Tools\,$\to$\,Board Manager})
+  \item Library: \textbf{Adafruit MCP4728} (Tools\,$\to$\,Manage Libraries)
+  \item Library: \textbf{mcp\_can} by Seeed Studio (Tools\,$\to$\,Manage Libraries)
+\end{itemize}
+
+\begin{notebox}
+\texttt{WiFi} and \texttt{WiFiUdp} ship with the ESP32 board package---do \textbf{not}
+install them separately.
+\end{notebox}
+
+\subsubsection*{Configure WiFi Credentials}
+
+Open \texttt{esp32\_car.ino} and set the hotspot SSID and password:
+
+\begin{lstlisting}[style=cpp]
+const char* ssid     = "YOUR_HOTSPOT_NAME";
+const char* password = "YOUR_HOTSPOT_PASSWORD";
+\end{lstlisting}
+
+\subsubsection*{Flash the Firmware}
+
+\begin{enumerate}
+  \item Connect the ESP32 to a computer via USB.
+  \item \textbf{Tools\,$\to$\,Board}\,$\to$\,\textbf{ESP32 Dev Module}.
+  \item \textbf{Tools\,$\to$\,Port}\,$\to$\,select the correct port
+        (\texttt{COM3} on Windows, \texttt{/dev/ttyUSB0} on Linux).
+  \item Click \textbf{Upload} and wait for ``Done uploading.''
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Pre-Operation Checklist}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Complete every item in order before each operating session.
+
+\begin{enumerate}[label=$\square$, leftmargin=2em]
+  \item Vehicle is in a closed, controlled area with no bystanders within 50\,ft.
+  \item Safety driver is seated, belted, and briefed.
+  \item Mobile hotspot is powered on and broadcasting.
+  \item Relay server is running on OCI (\lstinline[style=terminal]{python3 relay_server.py}).
+  \item Relay server shows: \lstinline[style=terminal]{Relay server live on port 4210. Waiting for car heartbeat...}
+  \item ESP32 is powered and WiFi-connected (Serial Monitor shows \lstinline[style=terminal]{WiFi connected}).
+  \item Relay server shows: \texttt{[OK] CAR CONNECTED! Logged IP: ('x.x.x.x', 4210)}
+  \item G29 is plugged in and has completed its self-calibration spin.
+  \item \texttt{pygame} is installed on the operator laptop.
+  \item Vehicle is in \textbf{Drive} with foot brake held by the safety driver.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Operating the System}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Starting a Session}
+
+Once all checklist items are satisfied, run the sender on the operator laptop:
+
+\begin{lstlisting}[style=terminal]
+python3 g29_to_server_original.py
+\end{lstlisting}
+
+Expected output:
+\begin{lstlisting}[style=terminal]
+Joystick detected: Logitech G29 Driving Force Racing Wheel
+Sending UDP to OCI Server at 147.224.143.221:4210
+seq=00000 | steer= 0.0000 | throttle=0.0000 | brake=0.0000
+seq=00001 | steer= 0.0012 | throttle=0.0000 | brake=0.0000
+...
+\end{lstlisting}
+
+The system is now live.
+
+\subsection{Control Mapping}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{G29 Input} & \textbf{Sent Value} & \textbf{Effect}\\
+  \midrule
+  Steering wheel left  & $-1.0$ to $0.0$ & Steer left (target up to $-250\,^\circ$)\\
+  Steering wheel right & $0.0$ to $+1.0$ & Steer right (target up to $+250\,^\circ$)\\
+  Throttle pedal       & $0.0$ to $1.0$  & Accelerate (open-loop DAC offset)\\
+  Brake pedal          & $0.0$ to $1.0$  & Brake (open-loop DAC offset)\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+The G29 pedal axes report \texttt{-1.0} when fully pressed and \texttt{+1.0} when
+released.  The sender inverts this so that \texttt{1.0} always means fully pressed.
+\end{notebox}
+
+\subsection{Stopping a Session}
+
+Press \textbf{Ctrl+C} on the operator laptop.  There is no automatic watchdog in the
+firmware --- when packets stop arriving, the ESP32 continues targeting the last
+commanded steering angle, throttle, and brake values.  The safety driver must apply
+the physical foot brake immediately when the remote session ends.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{How It Works}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Step 1 --- Car Registers with the Relay Server}
+
+On boot the ESP32 sends a \texttt{HEARTBEAT} UDP packet to the relay server every
+2\,s.  This registers the ESP32's public IP/port and keeps the hotspot NAT mapping
+alive so the server can route packets back.
+
+\subsection{Step 2 --- Operator Sends Control Commands}
+
+\texttt{g29\_to\_server\_original.py} polls the G29 at 60\,Hz and sends:
+\begin{center}\texttt{CMD;\textit{seq};\textit{steer};\textit{throttle};\textit{brake}}\end{center}
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Field} & \textbf{Range} & \textbf{Description}\\
+  \midrule
+  \texttt{steer}    & $-1.0\ldots+1.0$ & $-1.0=$ full left, $+1.0=$ full right\\
+  \texttt{throttle} & $0.0\ldots1.0$   & $0.0=$ released, $1.0=$ fully pressed\\
+  \texttt{brake}    & $0.0\ldots1.0$   & $0.0=$ released, $1.0=$ fully pressed\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Step 3 --- Relay Server Forwards to the Car}
+
+\texttt{relay\_server.py} receives \texttt{CMD} packets from the operator laptop and
+forwards them verbatim to the last registered \texttt{HEARTBEAT} address.
+
+\subsection{Step 4 --- ESP32 Drives the Actuators}
+
+\subsubsection*{Steering (Closed-Loop PID)}
+
+\[
+  \underbrace{\texttt{steer}}_{{-1}\ldots{+1}}
+  \;\times\; 250
+  \;\longrightarrow\;
+  \text{targetSTA}
+  \;\xrightarrow{\text{low-pass filter}}\;
+  \text{smoothTarget}
+  \;\xrightarrow{\text{PID + CAN feedback}}\;
+  \text{torque}
+\]
+\begin{align*}
+  \text{DAC\,2, Ch\,C} &= 2.47\,\text{V baseline} + \text{torque}\\
+  \text{DAC\,2, Ch\,D} &= 2.47\,\text{V baseline} - \text{torque}
+\end{align*}
+Actual steering angle is read from CAN ID \texttt{0x2} (little-endian \texttt{int16},
+divide by 10 for degrees) and fed back every loop.
+
+\subsubsection*{Throttle (Open-Loop)}
+
+\[
+  \texttt{throttle}\times 300 = \text{accelMag}\quad(0\text{--}300)
+\]
+\begin{align*}
+  \text{DAC\,1, Ch\,A} &= 0.37\,\text{V} + \text{accelMag}\\
+  \text{DAC\,1, Ch\,B} &= 0.75\,\text{V} + 2\times\text{accelMag}
+\end{align*}
+
+\subsubsection*{Brake (Open-Loop)}
+
+\[
+  \texttt{brake}\times 900 = \text{brakeMag}\quad(0\text{--}900)
+\]
+\begin{align*}
+  \text{DAC\,1, Ch\,C} &= 3.42\,\text{V} - \text{brakeMag}\\
+  \text{DAC\,1, Ch\,D} &= 1.51\,\text{V} + \text{brakeMag}
+\end{align*}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Troubleshooting}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{longtable}{>{\ttfamily\small}p{4.2cm}p{4.5cm}p{5.5cm}}
+  \toprule
+  \textbf{\rmfamily Symptom} & \textbf{Likely Cause} & \textbf{Fix}\\
+  \midrule\endhead\bottomrule\endfoot
+  No joystick found.
+    & G29 not detected
+    & Unplug/replug G29; wait for calibration spin; rerun.\\[5pt]
+  CAR CONNECTED never appears
+    & ESP32 cannot reach OCI
+    & Confirm hotspot is on; confirm UDP 4210 is open in OCI security list and \texttt{iptables}.\\[5pt]
+  Car does not respond
+    & CMD packets not reaching ESP32
+    & Confirm relay server is running and CAR CONNECTED was printed.\\[5pt]
+  Steering drives to limit and stays
+    & CAN bus not working; no PID feedback
+    & Check MCP2515 wiring; verify \textbf{16\,MHz} crystal on PCB.\\[5pt]
+  MCP2515 Init Failed (Serial Monitor)
+    & SPI wiring or wrong CS pin
+    & Check wiring against Section~3 pin table.\\[5pt]
+  Throttle/brake has no effect
+    & DAC\,1 values wrong
+    & Open Serial Monitor; verify \texttt{accelMag}/\texttt{brakeMag} change when pedals are pressed.\\[5pt]
+  Steering oscillates or overshoots
+    & PID gains need tuning
+    & Reduce \texttt{kp}; increase \texttt{kd} to damp.  Retest on stationary vehicle.\\
+\end{longtable}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Multi-Camera Streaming with OBS}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The car-side setup supports USB cameras for a live video feed.
+To broadcast multiple camera angles simultaneously to a video call:
+
+\begin{enumerate}
+  \item Install \textbf{OBS Studio} (\url{https://obsproject.com}).
+  \item Add each USB camera as a \textbf{Video Capture Device} source and arrange
+        them in a single OBS scene (e.g., side-by-side or picture-in-picture).
+  \item Enable \textbf{OBS Virtual Camera} via the Controls panel
+        (\textit{Start Virtual Camera}).
+  \item In Zoom (or any conferencing app), select \textbf{OBS Virtual Camera} as the
+        camera source.
+\end{enumerate}
+
+The remote participant sees the full multi-camera OBS scene without screen sharing.
+
+\end{document}
+
+

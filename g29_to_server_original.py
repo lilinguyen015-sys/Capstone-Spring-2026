@@ -57,7 +57,10 @@ def main():
                 joystick.get_axis(BRAKE_AXIS_INDEX)
             )
 
-            message = f"CMD;{sequence};{steering:.4f};{throttle:.4f};{brake:.4f}"
+            message = (
+                f"CMD;{sequence};"
+                f"{steering:.4f};{throttle:.4f};{brake:.4f}"
+            )
             sock.sendto(message.encode("utf-8"), (SERVER_IP, SERVER_PORT))
 
             print(
